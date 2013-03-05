@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+datarootdir=@datarootdir@
+datadir=@datadir@
+includedir=@includedir@
+
+Name: libgtklistmodel
+Description: Library with a generic list model for GtkTreeView
+Version: @VERSION@
+Requires: gtk+-3.0
+Libs: -L${libdir} -llibgtklistmodel
+Cflags: -I${includedir}
