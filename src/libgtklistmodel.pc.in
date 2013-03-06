@@ -9,5 +9,5 @@ Name: libgtklistmodel
 Description: Library with a generic list model for GtkTreeView
 Version: @VERSION@
 Requires: gtk+-3.0
-Libs: -L${libdir} -llibgtklistmodel
+Libs: -L${libdir} -lgtklistmodel
 Cflags: -I${includedir}

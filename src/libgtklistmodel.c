@@ -156,19 +156,19 @@ gtk_list_model_tree_model_init (GtkTreeModelIface *iface)
  *
  *****************************************************************************/
  
-static int n_columns(void) {
+static int n_columns(void* data) {
   return 0;
 }
 
-static GType column_type(int col) {
+static GType column_type(void* data, int col) {
   return G_TYPE_INT;
 }
 
-static int n_rows(void) {
+static int n_rows(void* data) {
   return 0;
 }
 
-void cell_value(int row, int col, GValue* value)
+void cell_value(void* data, int row, int col, GValue* value)
 {
 }
  
@@ -178,6 +178,7 @@ static void gtk_list_model_init (GtkListModel* model)
   model->column_type = column_type;
   model->n_rows = n_rows;
   model->cell_value = cell_value;
+  model->data = NULL;
   model->stamp = g_random_int();  /* Random int to check whether an iter belongs to our model */
 }
  
@@ -224,7 +225,7 @@ static GtkTreeModelFlags gtk_list_model_get_flags (GtkTreeModel *tree_model)
 static gint gtk_list_model_get_n_columns (GtkTreeModel *tree_model)
 {
   g_return_val_if_fail (GTK_LIST_IS_MODEL(tree_model), 0);
-  return GTK_LIST_MODEL(tree_model)->n_columns();
+  return GTK_LIST_MODEL(tree_model)->n_columns(GTK_LIST_MODEL(tree_model)->data);
 }
  
  
@@ -238,9 +239,10 @@ static gint gtk_list_model_get_n_columns (GtkTreeModel *tree_model)
 static GType gtk_list_model_get_column_type (GtkTreeModel *tree_model, gint index)
 {
   g_return_val_if_fail (GTK_LIST_IS_MODEL(tree_model), G_TYPE_INVALID);
-  g_return_val_if_fail (index < GTK_LIST_MODEL(tree_model)->n_columns() && index >= 0, G_TYPE_INVALID);
+  GtkListModel* model = GTK_LIST_MODEL(tree_model);
+  g_return_val_if_fail (index < model->n_columns(model->data) && index >= 0, G_TYPE_INVALID);
  
-  return GTK_LIST_MODEL(tree_model)->column_type(index);
+  return model->column_type(model->data, index);
 }
  
  
@@ -272,7 +274,7 @@ static gboolean gtk_list_model_get_iter (GtkTreeModel *tree_model, GtkTreeIter  
  
   n = indices[0]; /* the n-th top level row */
  
-  if ( n >= model->n_rows() || n < 0 )
+  if ( n >= model->n_rows(model->data) || n < 0 )
     return FALSE;
  
   iter->stamp = model->stamp;
@@ -319,22 +321,24 @@ static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* ite
   GtkListModel* gtk_list_model;
  
   g_return_if_fail (GTK_LIST_IS_MODEL (tree_model));
+
+  gtk_list_model = GTK_LIST_MODEL(tree_model);
+  
   g_return_if_fail (iter != NULL);
-  g_return_if_fail (column < GTK_LIST_MODEL(tree_model)->n_columns());
+  g_return_if_fail (column < gtk_list_model->n_columns(gtk_list_model->data));
   g_return_if_fail (VALID_ITER(iter));
  
-  g_value_init (value, GTK_LIST_MODEL(tree_model)->column_type(column));
+  g_value_init (value, gtk_list_model->column_type(gtk_list_model->data, column));
  
-  gtk_list_model = GTK_LIST_MODEL(tree_model);
   int row;
   ITER_GET(iter, row);
  
-  g_return_if_fail ( row < 0 || row > gtk_list_model->n_rows() );
+  g_return_if_fail ( row < 0 || row > gtk_list_model->n_rows(gtk_list_model->data) );
  
-  if (row >= gtk_list_model->n_rows())
+  if (row >= gtk_list_model->n_rows(gtk_list_model->data))
    g_return_if_reached();
  
-  gtk_list_model->cell_value(row, column, value);
+  gtk_list_model->cell_value(gtk_list_model->data, row, column, value);
 }
  
  
@@ -360,7 +364,7 @@ static gboolean gtk_list_model_iter_next (GtkTreeModel  *tree_model, GtkTreeIter
   ITER_GET(iter, row);
  
   /* Is this the last record in the list? */
-  if ((row + 1) >= gtk_list_model->n_rows())
+  if ((row + 1) >= gtk_list_model->n_rows(gtk_list_model->data))
     return FALSE;
  
   row += 1;
@@ -400,7 +404,7 @@ static gboolean gtk_list_model_iter_children (GtkTreeModel *tree_model, GtkTreeI
   gtk_list_model = GTK_LIST_MODEL(tree_model);
  
   /* No rows => no first row */
-  if (gtk_list_model->n_rows() == 0)
+  if (gtk_list_model->n_rows(gtk_list_model->data) == 0)
     return FALSE;
  
   /* Set iter to first item in list */
@@ -448,7 +452,7 @@ static gint gtk_list_model_iter_n_children (GtkTreeModel *tree_model, GtkTreeIte
  
   /* special case: if iter == NULL, return number of top-level rows */
   if (!iter)
-    return gtk_list_model->n_rows();
+    return gtk_list_model->n_rows(gtk_list_model->data);
  
   return 0; /* otherwise, this is easy again for a list */
 }
@@ -479,7 +483,7 @@ static gboolean gtk_list_model_iter_nth_child (GtkTreeModel *tree_model, GtkTree
  
   /* special case: if parent == NULL, set iter to n-th top-level row */
  
-  if( n >= gtk_list_model->n_rows() )
+  if( n >= gtk_list_model->n_rows(gtk_list_model->data) )
     return FALSE;
  
   if (n < 0) 
@@ -515,15 +519,17 @@ static gboolean gtk_list_model_iter_parent (GtkTreeModel* tree_model, GtkTreeIte
  *
  *****************************************************************************/
  
-GtkListModel *gtk_list_model_new (int (*n_columns)(void),
-                                  GType (*column_type)(int col),
-                                  int (*n_rows)(void),
-                                  void (*cell_value)(int row, int col, GValue* val)
+GtkListModel *gtk_list_model_new (void* data, 
+                                  int (*n_columns)(void* data),
+                                  GType (*column_type)(void* data, int col),
+                                  int (*n_rows)(void* data),
+                                  void (*cell_value)(void* data, int row, int col, GValue* val)
                                   )
 {
   GtkListModel *newmodel;
   newmodel = (GtkListModel*) g_object_new (GTK_LIST_TYPE_MODEL, NULL);
   g_assert( newmodel != NULL );
+  newmodel->data = data;
   newmodel->n_columns = n_columns;
   newmodel->column_type = column_type;
   newmodel->n_rows = n_rows;
@@ -531,8 +537,6 @@ GtkListModel *gtk_list_model_new (int (*n_columns)(void),
   return newmodel;
 }
  
- 
-
 void gtk_list_model_destroy(GtkListModel* model)
 {
   g_object_unref(model);

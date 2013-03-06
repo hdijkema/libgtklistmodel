@@ -36,11 +36,13 @@ struct _GtkListModel
 {
   GObject         parent;      /* this MUST be the first member */
  
-  int     (*n_columns)  (void);
-  GType   (*column_type)(int col);
-  int     (*n_rows)     (void);
-  void    (*cell_value) (int row, int col, GValue* val);
+  int     (*n_columns)  (void* data);
+  GType   (*column_type)(void* data, int col);
+  int     (*n_rows)     (void* data);
+  void    (*cell_value) (void* data, int row, int col, GValue* val);
  
+  void* data;
+  
   gint            stamp;       /* Random integer to check whether an iter belongs to our model */
 };
  
@@ -52,10 +54,11 @@ struct _GtkListModelClass
  
  
 GType             gtk_list_model_get_type (void);
-GtkListModel     *gtk_list_model_new (int (*n_columns)(void),
-                                      GType (*column_type)(int col),
-                                      int (*n_rows)(void),
-                                      void (*cell_value)(int row, int col, GValue* val)
+GtkListModel     *gtk_list_model_new (void* data,
+                                      int (*n_columns)(void* data),
+                                      GType (*column_type)(void* data, int col),
+                                      int (*n_rows)(void* data),
+                                      void (*cell_value)(void* data, int row, int col, GValue* val)
                                       );
 
 void gtk_list_model_destroy(GtkListModel* model);
