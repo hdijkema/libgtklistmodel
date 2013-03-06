@@ -333,7 +333,7 @@ static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* ite
   int row;
   ITER_GET(iter, row);
  
-  g_return_if_fail ( row < 0 || row > gtk_list_model->n_rows(gtk_list_model->data) );
+  g_return_if_fail ( row >= 0 && row < gtk_list_model->n_rows(gtk_list_model->data) );
  
   if (row >= gtk_list_model->n_rows(gtk_list_model->data))
    g_return_if_reached();
@@ -444,7 +444,7 @@ static gboolean gtk_list_model_iter_has_child (GtkTreeModel *tree_model, GtkTree
 static gint gtk_list_model_iter_n_children (GtkTreeModel *tree_model, GtkTreeIter* iter)
 {
   GtkListModel* gtk_list_model;
- 
+  
   g_return_val_if_fail (GTK_LIST_IS_MODEL (tree_model), -1);
   g_return_val_if_fail (iter == NULL || VALID_ITER(iter), FALSE);
  
@@ -577,4 +577,11 @@ void gtk_list_model_rows_reordered(GtkListModel* model, gint new_order[])
   GtkTreePath* path = gtk_tree_path_new();
   gtk_tree_model_rows_reordered(GTK_TREE_MODEL(model), path, NULL, new_order);
   gtk_tree_path_free(path);
+}
+
+int gtk_list_model_iter_to_row(GtkListModel* model, GtkTreeIter iter) {
+  int row;
+  GtkTreeIter *i = &iter;
+  ITER_GET(i, row);
+  return row;
 }
