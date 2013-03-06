@@ -68,6 +68,7 @@ void gtk_list_model_row_deleted(GtkListModel* model, int row);
 void gtk_list_model_row_inserted(GtkListModel* model, int row);
 
 int gtk_list_model_iter_to_row(GtkListModel* model, GtkTreeIter iter);
- 
+void gtk_list_model_row_to_iter(GtkListModel* model, int row, GtkTreeIter *iter);
+
 #endif
 

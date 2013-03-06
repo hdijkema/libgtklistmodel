@@ -211,7 +211,7 @@ static GtkTreeModelFlags gtk_list_model_get_flags (GtkTreeModel *tree_model)
 {
   g_return_val_if_fail (GTK_LIST_IS_MODEL(tree_model), (GtkTreeModelFlags)0);
  
-  return (GTK_TREE_MODEL_LIST_ONLY | GTK_TREE_MODEL_ITERS_PERSIST);
+  return (GTK_TREE_MODEL_LIST_ONLY) ; // My iters don't persist! | GTK_TREE_MODEL_ITERS_PERSIST);
 }
  
  
@@ -332,7 +332,7 @@ static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* ite
  
   int row;
   ITER_GET(iter, row);
- 
+  
   g_return_if_fail ( row >= 0 && row < gtk_list_model->n_rows(gtk_list_model->data) );
  
   if (row >= gtk_list_model->n_rows(gtk_list_model->data))
@@ -585,3 +585,10 @@ int gtk_list_model_iter_to_row(GtkListModel* model, GtkTreeIter iter) {
   ITER_GET(i, row);
   return row;
 }
+
+void gtk_list_model_row_to_iter(GtkListModel* model, int row, GtkTreeIter *iter)
+{
+  iter->stamp = model->stamp;
+  ITER_SET(iter, row);
+}
+
