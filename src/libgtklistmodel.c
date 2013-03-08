@@ -19,6 +19,7 @@
 
 #include <gtk/gtk.h>
 #include <gtklistmodel.h>
+#include <elementals.h>
 
 /* Declarations of local functions */
  
@@ -54,6 +55,21 @@ static GObjectClass *parent_class = NULL;  /* GObject stuff - nothing to worry a
 #define ITER_VALID(iter) (*((char*) &iter->user_data) = 'A')
 #define VALID_ITER(iter) ITER_VALID(iter)
 #define ITER_GET(iter, row) row = *((int*) &((char*) &iter->user_data)[1])
+
+static inline int* indcopy(int* a)
+{
+  int* b = (int*) mc_malloc(sizeof(int));
+  *b = *a;
+  return b;
+}
+
+static inline void inddestroy(int* a)
+{
+  mc_free(a);
+}
+
+IMPLEMENT_EL_ARRAY(gtklistmodel_index, int, indcopy, inddestroy);
+
 
 /*****************************************************************************
  *
@@ -171,6 +187,11 @@ static int n_rows(void* data) {
 void cell_value(void* data, int row, int col, GValue* value)
 {
 }
+
+gboolean filter_out_func(void* data, int row)
+{
+  return TRUE;
+}
  
 static void gtk_list_model_init (GtkListModel* model)
 {
@@ -178,7 +199,10 @@ static void gtk_list_model_init (GtkListModel* model)
   model->column_type = column_type;
   model->n_rows = n_rows;
   model->cell_value = cell_value;
+  model->filter_out_func = filter_out_func;
   model->data = NULL;
+  model->change_transaction = 0;
+  model->index = gtklistmodel_index_new();
   model->stamp = g_random_int();  /* Random int to check whether an iter belongs to our model */
 }
  
@@ -192,6 +216,10 @@ static void gtk_list_model_init (GtkListModel* model)
  
 static void gtk_list_model_finalize (GObject *object)
 {
+  log_debug("FINALIZING GTK_LIST_MODEL");
+  GtkListModel* model = GTK_LIST_MODEL(object);
+  gtklistmodel_index_destroy(model->index);
+  
   /* must chain up - finalize parent */
   (* parent_class->finalize) (object);
 }
@@ -211,7 +239,8 @@ static GtkTreeModelFlags gtk_list_model_get_flags (GtkTreeModel *tree_model)
 {
   g_return_val_if_fail (GTK_LIST_IS_MODEL(tree_model), (GtkTreeModelFlags)0);
  
-  return (GTK_TREE_MODEL_LIST_ONLY) ; // My iters don't persist! | GTK_TREE_MODEL_ITERS_PERSIST);
+  //return (GTK_TREE_MODEL_LIST_ONLY) ; // My iters don't persist! | GTK_TREE_MODEL_ITERS_PERSIST);
+  return 0;
 }
  
  
@@ -260,6 +289,8 @@ static gboolean gtk_list_model_get_iter (GtkTreeModel *tree_model, GtkTreeIter  
 {
   GtkListModel* model;
   gint          *indices, n, depth;
+  
+  //log_debug("CALLED");
  
   g_assert(GTK_LIST_IS_MODEL(tree_model));
   g_assert(path!=NULL);
@@ -273,8 +304,10 @@ static gboolean gtk_list_model_get_iter (GtkTreeModel *tree_model, GtkTreeIter  
   g_assert(depth == 1); /* depth 1 = top level; a list only has top level nodes and no children */
  
   n = indices[0]; /* the n-th top level row */
- 
-  if ( n >= model->n_rows(model->data) || n < 0 )
+  
+  //log_debug3("COUNT = %d, ROW = %d", gtklistmodel_index_count(model->index), n);
+  
+  if ( n >= gtklistmodel_index_count(model->index) || n < 0) 
     return FALSE;
  
   iter->stamp = model->stamp;
@@ -294,6 +327,8 @@ static gboolean gtk_list_model_get_iter (GtkTreeModel *tree_model, GtkTreeIter  
 static GtkTreePath* gtk_list_model_get_path (GtkTreeModel *tree_model, GtkTreeIter  *iter)
 {
   GtkTreePath*  path;
+  
+  //log_debug("CALLED");
  
   g_return_val_if_fail (GTK_LIST_IS_MODEL(tree_model), NULL);
   g_return_val_if_fail (iter != NULL, NULL);
@@ -319,6 +354,8 @@ static GtkTreePath* gtk_list_model_get_path (GtkTreeModel *tree_model, GtkTreeIt
 static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* iter, gint column, GValue* value)
 {
   GtkListModel* gtk_list_model;
+  
+  //log_debug("CALLED");
  
   g_return_if_fail (GTK_LIST_IS_MODEL (tree_model));
 
@@ -333,12 +370,12 @@ static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* ite
   int row;
   ITER_GET(iter, row);
   
-  g_return_if_fail ( row >= 0 && row < gtk_list_model->n_rows(gtk_list_model->data) );
- 
-  if (row >= gtk_list_model->n_rows(gtk_list_model->data))
-   g_return_if_reached();
- 
-  gtk_list_model->cell_value(gtk_list_model->data, row, column, value);
+  g_return_if_fail ( row >= 0 && row < gtklistmodel_index_count(gtk_list_model->index) );
+  
+  int index = *gtklistmodel_index_get(gtk_list_model->index, row);
+  g_return_if_fail ( index >= 0 && index < gtk_list_model->n_rows(gtk_list_model->data) );
+  
+  gtk_list_model->cell_value(gtk_list_model->data, index, column, value);
 }
  
  
@@ -352,6 +389,8 @@ static void gtk_list_model_get_value (GtkTreeModel* tree_model, GtkTreeIter* ite
 static gboolean gtk_list_model_iter_next (GtkTreeModel  *tree_model, GtkTreeIter* iter)
 {
   GtkListModel* gtk_list_model;
+  
+  //log_debug("CALLED");
  
   g_return_val_if_fail (GTK_LIST_IS_MODEL (tree_model), FALSE);
  
@@ -362,11 +401,14 @@ static gboolean gtk_list_model_iter_next (GtkTreeModel  *tree_model, GtkTreeIter
  
   int row;
   ITER_GET(iter, row);
+  
+  //log_debug3("COUNT = %d, ROW = %d",gtklistmodel_index_count(gtk_list_model->index), row);
  
   /* Is this the last record in the list? */
-  if ((row + 1) >= gtk_list_model->n_rows(gtk_list_model->data))
+  if ((row + 1) >= gtklistmodel_index_count(gtk_list_model->index) )
     return FALSE;
  
+  //log_debug("yes");
   row += 1;
  
   iter->stamp = gtk_list_model->stamp;
@@ -390,6 +432,8 @@ static gboolean gtk_list_model_iter_next (GtkTreeModel  *tree_model, GtkTreeIter
 static gboolean gtk_list_model_iter_children (GtkTreeModel *tree_model, GtkTreeIter* iter, GtkTreeIter* parent)
 {
   GtkListModel* gtk_list_model;
+  
+  //log_debug("CALLED");
  
   g_return_val_if_fail (parent == NULL || parent->user_data != NULL, FALSE);
  
@@ -404,7 +448,7 @@ static gboolean gtk_list_model_iter_children (GtkTreeModel *tree_model, GtkTreeI
   gtk_list_model = GTK_LIST_MODEL(tree_model);
  
   /* No rows => no first row */
-  if (gtk_list_model->n_rows(gtk_list_model->data) == 0)
+  if (gtklistmodel_index_count(gtk_list_model->index) == 0)
     return FALSE;
  
   /* Set iter to first item in list */
@@ -445,14 +489,18 @@ static gint gtk_list_model_iter_n_children (GtkTreeModel *tree_model, GtkTreeIte
 {
   GtkListModel* gtk_list_model;
   
+  //log_debug("CALLED");
+  
   g_return_val_if_fail (GTK_LIST_IS_MODEL (tree_model), -1);
   g_return_val_if_fail (iter == NULL || VALID_ITER(iter), FALSE);
  
   gtk_list_model = GTK_LIST_MODEL(tree_model);
+  
+  //log_debug2("ITER COUNT = %d", gtklistmodel_index_count(gtk_list_model->index));
  
   /* special case: if iter == NULL, return number of top-level rows */
   if (!iter)
-    return gtk_list_model->n_rows(gtk_list_model->data);
+    return gtklistmodel_index_count(gtk_list_model->index);
  
   return 0; /* otherwise, this is easy again for a list */
 }
@@ -472,6 +520,8 @@ static gint gtk_list_model_iter_n_children (GtkTreeModel *tree_model, GtkTreeIte
 static gboolean gtk_list_model_iter_nth_child (GtkTreeModel *tree_model, GtkTreeIter* iter, GtkTreeIter* parent, gint n)
 {
   GtkListModel* gtk_list_model;
+  
+  //log_debug("CALLED");
  
   g_return_val_if_fail (GTK_LIST_IS_MODEL (tree_model), FALSE);
  
@@ -482,8 +532,10 @@ static gboolean gtk_list_model_iter_nth_child (GtkTreeModel *tree_model, GtkTree
     return FALSE;
  
   /* special case: if parent == NULL, set iter to n-th top-level row */
+  
+  //log_debug2("n = %d", n);
  
-  if( n >= gtk_list_model->n_rows(gtk_list_model->data) )
+  if( n >= gtklistmodel_index_count(gtk_list_model->index) )
     return FALSE;
  
   if (n < 0) 
@@ -518,6 +570,67 @@ static gboolean gtk_list_model_iter_parent (GtkTreeModel* tree_model, GtkTreeIte
  *                    new custom list tree model for you to use.
  *
  *****************************************************************************/
+
+void gtk_list_model_refilter(GtkListModel* model)
+{
+  int i, N;
+  gtklistmodel_index a = gtklistmodel_index_new();
+  for(i=0, N = model->n_rows(model->data); i < N; ++i) {
+    if (model->filter_out_func(model->data, i)) {
+      gtklistmodel_index_append(a, &i);
+    }
+  }
+  
+  //log_debug2("INDEX COUNT = %d", gtklistmodel_index_count(a));
+  
+  gtklistmodel_index old = model->index;
+  model->index = a;
+  
+  int currentN = gtklistmodel_index_count(old);
+  int newN = gtklistmodel_index_count(a);
+  int restN = -1;
+  
+  if (currentN > newN) { // newN smaller, signal remove of new records
+    int i;
+    for(i = currentN - 1; i >= newN; --i) {
+      GtkTreePath* path = gtk_tree_path_new();
+      gtk_tree_path_append_index(path, i);
+      gtk_tree_model_row_deleted(GTK_TREE_MODEL(model), path);
+      gtk_tree_path_free(path);
+    }
+    restN = newN;
+  } else if (currentN < newN) { // newN bigger, signal insert of records
+    int i;
+    for(i = currentN; i < newN; ++i) {
+      GtkTreePath* path = gtk_tree_path_new();
+      GtkTreeIter iter;
+      gtk_tree_path_append_index(path, i);
+      ITER_SET((&iter), i);
+      gtk_tree_model_row_inserted(GTK_TREE_MODEL(model), path, &iter);
+      gtk_tree_path_free(path);
+    }
+    restN = currentN;
+  }
+  
+  // signal change of all other records
+  
+  {
+    int i;
+    for(i = 0; i < restN; ++i) {
+      GtkTreePath* path = gtk_tree_path_new();
+      GtkTreeIter iter;
+      gtk_tree_path_append_index(path, i);
+      ITER_SET((&iter), i);
+      gtk_tree_model_row_changed(GTK_TREE_MODEL(model), path, &iter);
+      gtk_tree_path_free(path);
+    }
+  }
+  
+  // destroy old index
+  
+  gtklistmodel_index_destroy(old);
+}
+
  
 GtkListModel *gtk_list_model_new (void* data, 
                                   int (*n_columns)(void* data),
@@ -534,61 +647,95 @@ GtkListModel *gtk_list_model_new (void* data,
   newmodel->column_type = column_type;
   newmodel->n_rows = n_rows;
   newmodel->cell_value = cell_value;
+  newmodel->filter_out_func = filter_out_func;
+  newmodel->index = gtklistmodel_index_new(); 
+  newmodel->change_transaction = 0;
+  gtk_list_model_refilter(newmodel);
   return newmodel;
 }
  
 void gtk_list_model_destroy(GtkListModel* model)
 {
-  g_object_unref(model);
+  g_object_unref(G_OBJECT(model));
 }
 
-void gtk_list_model_row_changed(GtkListModel* model, int row)
+void gtk_list_model_set_filter(GtkListModel* model, gboolean (*f)(void* data, int row))
 {
-  GtkTreeIter iter;
-  gtk_list_model_iter_nth_child (GTK_TREE_MODEL(model), &iter, NULL, row);
-  GtkTreePath* path = gtk_tree_path_new();
-  gtk_tree_path_append_index(path, row);
-  gtk_tree_model_row_changed(GTK_TREE_MODEL(model), path, &iter);
-  gtk_tree_path_free(path);
+  model->filter_out_func = f;
+  gtk_list_model_refilter(model);
 }
 
-void gtk_list_model_row_deleted(GtkListModel* model, int row)
-{
-  GtkTreeIter iter;
-  gtk_list_model_iter_nth_child (GTK_TREE_MODEL(model), &iter, NULL, row);
-  GtkTreePath* path = gtk_tree_path_new();
-  gtk_tree_path_append_index(path, row);
-  gtk_tree_model_row_deleted(GTK_TREE_MODEL(model),path);
-  gtk_tree_path_free(path);
+/*
+  This method will start a change job. 
+  If you're inserting or changing or removing 
+  entries in this model, make sure you call
+  this method at the start of the job.
+  Calling this function can be nested. 
+  When the last commit_change() is called, 
+  the model will be refiltered.
+*/
+void gtk_list_model_begin_change(GtkListModel* model)
+{ 
+  model->change_transaction += 1; 
 }
 
-void gtk_list_model_row_inserted(GtkListModel* model, int row)
+void gtk_list_model_commit_change(GtkListModel* model)
 {
-  GtkTreeIter iter;
-  gtk_list_model_iter_nth_child (GTK_TREE_MODEL(model), &iter, NULL, row);
-  GtkTreePath* path = gtk_tree_path_new();
-  gtk_tree_path_append_index(path, row);
-  gtk_tree_model_row_inserted(GTK_TREE_MODEL(model), path, &iter);
-  gtk_tree_path_free(path);
-}
-
-void gtk_list_model_rows_reordered(GtkListModel* model, gint new_order[])
-{
-  GtkTreePath* path = gtk_tree_path_new();
-  gtk_tree_model_rows_reordered(GTK_TREE_MODEL(model), path, NULL, new_order);
-  gtk_tree_path_free(path);
+  g_return_if_fail(model->change_transaction > 0);
+  
+  model->change_transaction -= 1;
+  if (model->change_transaction == 0) {
+    gtk_list_model_refilter(model);  
+  }
 }
 
 int gtk_list_model_iter_to_row(GtkListModel* model, GtkTreeIter iter) {
-  int row;
-  GtkTreeIter *i = &iter;
-  ITER_GET(i, row);
+  int row = -1;
+  int index_row;
+  ITER_GET((&iter), index_row);
+  if (index_row < gtklistmodel_index_count(model->index)) {
+    row = *gtklistmodel_index_get(model->index, index_row);
+  }
   return row;
 }
 
 void gtk_list_model_row_to_iter(GtkListModel* model, int row, GtkTreeIter *iter)
 {
   iter->stamp = model->stamp;
-  ITER_SET(iter, row);
+  int index, N;
+  for(index = 0, N = gtklistmodel_index_count(model->index); 
+            index < N && *gtklistmodel_index_get(model->index, index) != row; ++index);
+  if (index == N) index = 0;
+  ITER_SET(iter, index);
 }
+
+void gtk_list_model_iterate_with_func(GtkListModel* model, void (*f)(void *model, int row, void *data), void* data)
+{
+  int i, N;
+  for(i = 0, N = gtklistmodel_index_count(model->index); i < N; ++i) {
+    f(model->data, *gtklistmodel_index_get(model->index, i), data);
+  }
+}
+
+static int mycmp(GtkListModel* model, int* row1, int* row2) 
+{
+  return model->sort_cmp(model->data, *row1, *row2);
+}
+
+void gtk_list_model_sort(GtkListModel* model, int (*cmp)(void* data, int row1, int row2)) {
+  model->sort_cmp = cmp;
+  gtklistmodel_index_sort1(model->index, model, (int (*)(void*, int*, int*)) mycmp);
+  {
+    int i, N;
+    for(i = 0, N = gtklistmodel_index_count(model->index); i < N; ++i) {
+      GtkTreePath* path = gtk_tree_path_new();
+      GtkTreeIter iter;
+      gtk_tree_path_append_index(path, i);
+      ITER_SET((&iter), i);
+      gtk_tree_model_row_changed(GTK_TREE_MODEL(model), path, &iter);
+      gtk_tree_path_free(path);
+    }
+  }
+}
+
 
