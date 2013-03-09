@@ -581,7 +581,7 @@ void gtk_list_model_refilter(GtkListModel* model)
     }
   }
   
-  //log_debug2("INDEX COUNT = %d", gtklistmodel_index_count(a));
+  log_debug2("INDEX COUNT = %d", gtklistmodel_index_count(a));
   
   gtklistmodel_index old = model->index;
   model->index = a;
@@ -597,6 +597,7 @@ void gtk_list_model_refilter(GtkListModel* model)
       gtk_tree_path_append_index(path, i);
       gtk_tree_model_row_deleted(GTK_TREE_MODEL(model), path);
       gtk_tree_path_free(path);
+      //log_debug2("deleted %d", i);
     }
     restN = newN;
   } else if (currentN < newN) { // newN bigger, signal insert of records
@@ -608,7 +609,10 @@ void gtk_list_model_refilter(GtkListModel* model)
       ITER_SET((&iter), i);
       gtk_tree_model_row_inserted(GTK_TREE_MODEL(model), path, &iter);
       gtk_tree_path_free(path);
+      //log_debug2("inserted %d", i);
     }
+    restN = currentN;
+  } else { // equal
     restN = currentN;
   }
   
@@ -623,6 +627,7 @@ void gtk_list_model_refilter(GtkListModel* model)
       ITER_SET((&iter), i);
       gtk_tree_model_row_changed(GTK_TREE_MODEL(model), path, &iter);
       gtk_tree_path_free(path);
+      //log_debug2("changed %d", i);
     }
   }
   
