@@ -52,6 +52,8 @@ struct _GtkListModel
  
   void* data;
   
+  gboolean refilter_transaction;
+  
   gint            stamp;       /* Random integer to check whether an iter belongs to our model */
 };
  

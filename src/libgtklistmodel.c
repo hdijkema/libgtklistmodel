@@ -203,6 +203,7 @@ static void gtk_list_model_init (GtkListModel* model)
   model->data = NULL;
   model->change_transaction = 0;
   model->index = gtklistmodel_index_new();
+  model->refilter_transaction = FALSE;
   model->stamp = g_random_int();  /* Random int to check whether an iter belongs to our model */
 }
  
@@ -573,6 +574,13 @@ static gboolean gtk_list_model_iter_parent (GtkTreeModel* tree_model, GtkTreeIte
 
 void gtk_list_model_refilter(GtkListModel* model)
 {
+  // Don't allow recursive refilters
+  if (model->refilter_transaction) {
+    return;
+  }
+  
+  model->refilter_transaction = TRUE;
+  
   int i, N;
   gtklistmodel_index a = gtklistmodel_index_new();
   for(i=0, N = model->n_rows(model->data); i < N; ++i) {
@@ -634,6 +642,8 @@ void gtk_list_model_refilter(GtkListModel* model)
   // destroy old index
   
   gtklistmodel_index_destroy(old);
+  
+  model->refilter_transaction = FALSE;
 }
 
  
@@ -655,6 +665,7 @@ GtkListModel *gtk_list_model_new (void* data,
   newmodel->filter_out_func = filter_out_func;
   newmodel->index = gtklistmodel_index_new(); 
   newmodel->change_transaction = 0;
+  newmodel->refilter_transaction = FALSE;
   gtk_list_model_refilter(newmodel);
   return newmodel;
 }
