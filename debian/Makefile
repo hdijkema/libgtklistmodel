@@ -1,12 +1,11 @@
 VERSION=$(shell ./get_version.sh)
 MYDIST=$(shell cat /etc/lsb-release | grep CODENAME | sed -e 's/[^=]*[=]//')
-SUBVERSION=1
+SUBVERSION=2
 PACKAGE=libgtklistmodel
 DEPENDS=libpcre3,elementals,gtk+-3.0
 DEPENDS1=
 BUILDDEPENDS=automake,autoconf,intltool,libpthread-stubs0-dev,libpcre3-dev,pkg-config,elementals,libgtk-3-dev
-#DISTROS=natty oneiric precise quantal maverick lucid
-DISTROS=precise
+DISTROS=oneiric precise quantal
 DISTROS1=maverick lucid
 DVERSION=${VERSION}.${DISTRO}.${SUBVERSION}
 UBUNTU=/tmp/libgtklistmodel_ppa
@@ -40,7 +39,7 @@ clean:
 	rm -f *.tar.gz
 	rm -rf ${UBUNTU}
 
-test:
+test: clean
 	make build DISTRO=${MYDIST} DEPEND=${DEPENDS}
 	(cd ${UBUNTU};sudo pbuilder build *.dsc)
 
