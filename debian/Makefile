@@ -2,14 +2,14 @@ VERSION=$(shell ./get_version.sh)
 MYDIST=$(shell cat /etc/lsb-release | grep CODENAME | sed -e 's/[^=]*[=]//')
 SUBVERSION=1
 PACKAGE=libgtklistmodel
-DEPENDS=libpcre3 elementals gtk+-3.0
+DEPENDS=libpcre3,elementals,gtk+-3.0
 DEPENDS1=
 BUILDDEPENDS=automake,autoconf,intltool,libpthread-stubs0-dev,libpcre3-dev,pkg-config,elementals,libgtk-3-dev
 #DISTROS=natty oneiric precise quantal maverick lucid
 DISTROS=precise
 DISTROS1=maverick lucid
 DVERSION=${VERSION}.${DISTRO}.${SUBVERSION}
-UBUNTU=/tmp/elementals_ppa
+UBUNTU=/tmp/libgtklistmodel_ppa
 UDIR=${UBUNTU}/${PACKAGE}-${DVERSION}
 DDIR=${UDIR}/debian
 PPA=ppa:0k-hans-f8/ppa
