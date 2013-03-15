@@ -1,0 +1,5 @@
+libgtklistmodel (%%VERSION%%.%%DISTRO%%.%%SUBVERSION%%) %%DISTRO%%; urgency=low
+
+  * Initial release 
+
+ -- Hans Oesterholt (Lives in the Netherlands) <debian@oesterholt.net>  Fri, 08 Feb 2013 09:24:23 +0200
