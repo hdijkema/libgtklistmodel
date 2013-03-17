@@ -202,7 +202,7 @@ static void gtk_list_model_init (GtkListModel* model)
   model->filter_out_func = filter_out_func;
   model->data = NULL;
   model->change_transaction = 0;
-  model->index = gtklistmodel_index_new();
+  model->index = mc_take_over(gtklistmodel_index_new());
   model->refilter_transaction = FALSE;
   model->stamp = g_random_int();  /* Random int to check whether an iter belongs to our model */
 }
@@ -582,7 +582,7 @@ void gtk_list_model_refilter(GtkListModel* model)
   model->refilter_transaction = TRUE;
   
   int i, N;
-  gtklistmodel_index a = gtklistmodel_index_new();
+  gtklistmodel_index a = mc_take_over(gtklistmodel_index_new());
   for(i=0, N = model->n_rows(model->data); i < N; ++i) {
     if (model->filter_out_func(model->data, i)) {
       gtklistmodel_index_append(a, &i);
@@ -663,7 +663,7 @@ GtkListModel *gtk_list_model_new (void* data,
   newmodel->n_rows = n_rows;
   newmodel->cell_value = cell_value;
   newmodel->filter_out_func = filter_out_func;
-  newmodel->index = gtklistmodel_index_new(); 
+  //newmodel->index = mc_take_over(gtklistmodel_index_new());  // already done
   newmodel->change_transaction = 0;
   newmodel->refilter_transaction = FALSE;
   gtk_list_model_refilter(newmodel);
